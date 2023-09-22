@@ -64,7 +64,7 @@ public class Header
 
     public static void FixChecksum(Span<byte> bytes)
     {
-        bytes[0xc..].Clear();
+        for (int i = 12; i < 16; i++) bytes[i] = 0x00;
         int checksum = 0;
         for (int i = 0; i < bytes.Length; i++)
         {

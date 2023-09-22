@@ -6,7 +6,6 @@ public interface IBitWriter
 {
     int Length { get; }
     int Position { get; }
-
     void Align();
     void Dispose();
     void Seek(int bytePostion);

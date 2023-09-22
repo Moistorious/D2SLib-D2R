@@ -13,11 +13,12 @@ public sealed class Mercenary
 
     public void Write(IBitWriter writer)
     {
-        writer.WriteUInt16(IsDead);
-        writer.WriteUInt32(Id);
-        writer.WriteUInt16(NameId);
-        writer.WriteUInt16(TypeId);
-        writer.WriteUInt32(Experience);
+        writer.WriteUInt16(IsDead);         // 2
+        writer.WriteUInt32(Id);             // 2 + 4 = 6
+        writer.WriteUInt16(NameId);         // 6 + 2 = 8
+        writer.WriteUInt16(TypeId);         // 8 + 2 = 10
+        writer.WriteUInt32(Experience);     // 10 + 4 = 14
+        writer.WriteUInt16(0);              // 14 + 2 = 16
     }
 
     public static Mercenary Read(IBitReader reader)

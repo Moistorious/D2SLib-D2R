@@ -1,5 +1,6 @@
 ﻿using D2SLib.IO;
 using System.Diagnostics;
+using System.Text;
 
 namespace D2SLib.Model.Save;
 
@@ -7,10 +8,8 @@ public sealed class QuestsSection : IDisposable
 {
     private readonly QuestsDifficulty[] _difficulties = new QuestsDifficulty[3];
 
-    //0x014b [unk = 0x1, 0x0, 0x0, 0x0]
-    public uint? Magic { get; set; }
     //0x014f [quests header identifier = 0x57, 0x6f, 0x6f, 0x21 "Woo!"]
-    public uint? Header { get; set; }
+    public string Header { get; private set; } = string.Empty;
     //0x0153 [version = 0x6, 0x0, 0x0, 0x0]
     public uint? Version { get; set; }
     //0x0153 [quests header length = 0x2a, 0x1]
@@ -22,10 +21,10 @@ public sealed class QuestsSection : IDisposable
 
     public void Write(IBitWriter writer)
     {
-        writer.WriteUInt32(Magic ?? 0x1);
-        writer.WriteUInt32(Header ?? 0x216F6F57);
-        writer.WriteUInt32(Version ?? 0x6);
-        writer.WriteUInt16(Length ?? 0x12A);
+        //writer.WriteUInt32(Magic ?? 0x1);
+        writer.WriteString(Header, 4);
+        writer.WriteUInt32(Version ?? 0x06);
+        writer.WriteUInt16(Length ?? 0x012A);
 
         for (int i = 0; i < _difficulties.Length; i++)
         {
@@ -35,13 +34,17 @@ public sealed class QuestsSection : IDisposable
 
     public static QuestsSection Read(IBitReader reader)
     {
-        var questSection = new QuestsSection
-        {
-            Magic = reader.ReadUInt32(),
-            Header = reader.ReadUInt32(),
-            Version = reader.ReadUInt32(),
-            Length = reader.ReadUInt16()
-        };
+        var questSection = new QuestsSection();
+        //string header = reader.ReadString(4);
+        questSection.Header = reader.ReadString(4);
+        questSection.Version = reader.ReadUInt32();
+        questSection.Length = reader.ReadUInt16();
+        //{ Seems to be reading older versions?
+        //    Magic = reader.ReadUInt32(),
+        //    Header = reader.ReadUInt32(),
+        //    Version = reader.ReadUInt32(),
+        //    Length = reader.ReadUInt16()
+        //};
 
         for (int i = 0; i < questSection._difficulties.Length; i++)
         {
@@ -79,6 +82,7 @@ public sealed class QuestsDifficulty : IDisposable
 {
     private QuestsDifficulty(IBitReader reader)
     {
+        int pos = reader.Position / 8;
         ActI = ActIQuests.Read(reader);
         ActII = ActIIQuests.Read(reader);
         ActIII = ActIIIQuests.Read(reader);
@@ -146,12 +150,12 @@ public sealed class Quest : IDisposable
     public bool LeftTown { get => _flags[3]; set => _flags[3] = value; }
     public bool EnterArea { get => _flags[4]; set => _flags[4] = value; }
     public bool Custom1 { get => _flags[5]; set => _flags[5] = value; }
-    public bool Custom2 { get => _flags[6]; set => _flags[6] = value; }
-    public bool Custom3 { get => _flags[7]; set => _flags[7] = value; }
-    public bool Custom4 { get => _flags[8]; set => _flags[8] = value; }
-    public bool Custom5 { get => _flags[9]; set => _flags[9] = value; }
-    public bool Custom6 { get => _flags[10]; set => _flags[10] = value; }
-    public bool Custom7 { get => _flags[11]; set => _flags[11] = value; }
+    public bool DrankPotionOfLife { get => _flags[6]; set => _flags[6] = value; }
+    public bool Custom2 { get => _flags[7]; set => _flags[7] = value; }
+    public bool ReadScrollofResistance { get => _flags[8]; set => _flags[8] = value; }
+    public bool Custom3 { get => _flags[9]; set => _flags[9] = value; }
+    public bool Custom4 { get => _flags[10]; set => _flags[10] = value; }
+    public bool SecretCowLevelCompleted { get => _flags[11]; set => _flags[11] = value; }
     public bool QuestLog { get => _flags[12]; set => _flags[12] = value; }
     public bool PrimaryGoalAchieved { get => _flags[13]; set => _flags[13] = value; }
     public bool CompletedNow { get => _flags[14]; set => _flags[14] = value; }
@@ -200,19 +204,19 @@ public sealed class Quest : IDisposable
 
 public sealed class ActIQuests : IDisposable
 {
-    private readonly Quest[] _quests = new Quest[8];
+    private readonly Quest[] _quests = new Quest[6];
 
-    public Quest Introduction => _quests[0];
-    public Quest DenOfEvil => _quests[1];
-    public Quest SistersBurialGrounds => _quests[2];
-    public Quest ToolsOfTheTrade => _quests[3];
-    public Quest TheSearchForCain => _quests[4];
-    public Quest TheForgottenTower => _quests[5];
-    public Quest SistersToTheSlaughter => _quests[6];
-    public Quest Completion => _quests[7];
+    public bool TalkedToWarriv { get; private set; } = false;
+    public Quest DenOfEvil => _quests[0];
+    public Quest SistersBurialGrounds => _quests[1];
+    public Quest ToolsOfTheTrade => _quests[2];
+    public Quest TheSearchForCain => _quests[3];
+    public Quest TheForgottenTower => _quests[4];
+    public Quest SistersToTheSlaughter => _quests[5];
 
     public void Write(IBitWriter writer)
     {
+        writer.WriteBytes(new byte[2] { BitConverter.GetBytes(TalkedToWarriv)[0], 0x00 });
         for (int i = 0; i < _quests.Length; i++)
         {
             _quests[i].Write(writer);
@@ -221,7 +225,9 @@ public sealed class ActIQuests : IDisposable
 
     public static ActIQuests Read(IBitReader reader)
     {
+        int pos = reader.Position / 8;
         var quests = new ActIQuests();
+        quests.TalkedToWarriv = (reader.ReadBytes(2)[0] == 0x01);
         for (int i = 0; i < quests._quests.Length; i++)
         {
             quests._quests[i] = Quest.Read(reader);
@@ -240,19 +246,21 @@ public sealed class ActIQuests : IDisposable
 
 public sealed class ActIIQuests : IDisposable
 {
-    private readonly Quest[] _quests = new Quest[8];
+    private readonly Quest[] _quests = new Quest[6];
 
-    public Quest Introduction => _quests[0];
-    public Quest RadamentsLair => _quests[1];
-    public Quest TheHoradricStaff => _quests[2];
-    public Quest TaintedSun => _quests[3];
-    public Quest ArcaneSanctuary => _quests[4];
-    public Quest TheSummoner => _quests[5];
-    public Quest TheSevenTombs => _quests[6];
-    public Quest Completion => _quests[7];
+    public bool TraveledToAct { get; private set; } = false;
+    public bool TalkedToJerhyn { get; private set; } = false;
+    public Quest RadamentsLair => _quests[0];
+    public Quest TheHoradricStaff => _quests[1];
+    public Quest TaintedSun => _quests[2];
+    public Quest ArcaneSanctuary => _quests[3];
+    public Quest TheSummoner => _quests[4];
+    public Quest TheSevenTombs => _quests[5];
 
     public void Write(IBitWriter writer)
     {
+        writer.WriteBytes(new byte[2] { BitConverter.GetBytes(TraveledToAct)[0], 0x00 });
+        writer.WriteBytes(new byte[2] { BitConverter.GetBytes(TalkedToJerhyn)[0], 0x00 });
         for (int i = 0; i < _quests.Length; i++)
         {
             _quests[i].Write(writer);
@@ -262,6 +270,8 @@ public sealed class ActIIQuests : IDisposable
     public static ActIIQuests Read(IBitReader reader)
     {
         var quests = new ActIIQuests();
+        quests.TraveledToAct = (reader.ReadBytes(2)[0] == 0x01);
+        quests.TalkedToJerhyn = (reader.ReadBytes(2)[0] == 0x01);
         for (int i = 0; i < quests._quests.Length; i++)
         {
             quests._quests[i] = Quest.Read(reader);
@@ -280,19 +290,21 @@ public sealed class ActIIQuests : IDisposable
 
 public sealed class ActIIIQuests : IDisposable
 {
-    private readonly Quest[] _quests = new Quest[8];
+    private readonly Quest[] _quests = new Quest[6];
 
-    public Quest Introduction => _quests[0];
-    public Quest LamEsensTome => _quests[1];
-    public Quest KhalimsWill => _quests[2];
-    public Quest BladeOfTheOldReligion => _quests[3];
-    public Quest TheGoldenBird => _quests[4];
-    public Quest TheBlackenedTemple => _quests[5];
-    public Quest TheGuardian => _quests[6];
-    public Quest Completion => _quests[7];
+    public bool TraveledToAct { get; private set; } = false;
+    public bool TalkedToHratli { get; private set; } = false;
+    public Quest LamEsensTome => _quests[0];
+    public Quest KhalimsWill => _quests[1];
+    public Quest BladeOfTheOldReligion => _quests[2];
+    public Quest TheGoldenBird => _quests[3];
+    public Quest TheBlackenedTemple => _quests[4];
+    public Quest TheGuardian => _quests[5];
 
     public void Write(IBitWriter writer)
     {
+        writer.WriteBytes(new byte[2] { BitConverter.GetBytes(TraveledToAct)[0], 0x00 });
+        writer.WriteBytes(new byte[2] { BitConverter.GetBytes(TalkedToHratli)[0], 0x00 });
         for (int i = 0; i < _quests.Length; i++)
         {
             _quests[i].Write(writer);
@@ -302,6 +314,8 @@ public sealed class ActIIIQuests : IDisposable
     public static ActIIIQuests Read(IBitReader reader)
     {
         var quests = new ActIIIQuests();
+        quests.TraveledToAct = (reader.ReadBytes(2)[0] == 0x01);
+        quests.TalkedToHratli = (reader.ReadBytes(2)[0] == 0x01);
         for (int i = 0; i < quests._quests.Length; i++)
         {
             quests._quests[i] = Quest.Read(reader);
@@ -320,34 +334,35 @@ public sealed class ActIIIQuests : IDisposable
 
 public sealed class ActIVQuests : IDisposable
 {
-    private readonly Quest[] _quests = new Quest[8];
+    private readonly Quest[] _quests = new Quest[3];
 
-    public Quest Introduction => _quests[0];
-    public Quest TheFallenAngel => _quests[1];
-    public Quest TerrorsEnd => _quests[2];
-    public Quest Hellforge => _quests[3];
-    public Quest Completion => _quests[4];
-
-    //3 shorts at the end of ActIV completion. presumably for extra quests never used.
-    public Quest Extra1 => _quests[5];
-    public Quest Extra2 => _quests[6];
-    public Quest Extra3 => _quests[7];
+    public bool TraveledToAct { get; private set; } = false;
+    public bool TalkedToTyreal { get; private set; } = false;
+    public Quest TheFallenAngel => _quests[0];
+    public Quest TerrorsEnd => _quests[1];
+    public Quest Hellforge => _quests[2];
 
     public void Write(IBitWriter writer)
     {
+        writer.WriteBytes(new byte[2] { BitConverter.GetBytes(TraveledToAct)[0], 0x00 });
+        writer.WriteBytes(new byte[2] { BitConverter.GetBytes(TalkedToTyreal)[0], 0x00 });
         for (int i = 0; i < _quests.Length; i++)
         {
             _quests[i].Write(writer);
         }
+        for(int i=0;i<6;i++) writer.WriteByte(0x00);
     }
 
     public static ActIVQuests Read(IBitReader reader)
     {
         var quests = new ActIVQuests();
+        quests.TraveledToAct = (reader.ReadBytes(2)[0] == 0x01);
+        quests.TalkedToTyreal = (reader.ReadBytes(2)[0] == 0x01);
         for (int i = 0; i < quests._quests.Length; i++)
         {
             quests._quests[i] = Quest.Read(reader);
         }
+        reader.ReadBytes(6);
         return quests;
     }
 
@@ -362,42 +377,47 @@ public sealed class ActIVQuests : IDisposable
 
 public sealed class ActVQuests : IDisposable
 {
-    private readonly Quest[] _quests = new Quest[16];
+    private readonly Quest[] _quests = new Quest[6];
 
-    public Quest Introduction => _quests[0];
-    //2 shorts after ActV introduction. presumably for extra quests never used.
-    public Quest Extra1 => _quests[1];
-    public Quest Extra2 => _quests[2];
-    public Quest SiegeOnHarrogath => _quests[3];
-    public Quest RescueOnMountArreat => _quests[4];
-    public Quest PrisonOfIce => _quests[5];
-    public Quest BetrayalOfHarrogath => _quests[6];
-    public Quest RiteOfPassage => _quests[7];
-    public Quest EveOfDestruction => _quests[8];
-    public Quest Completion => _quests[9];
-    //6 shorts after ActV completion. presumably for extra quests never used.
-    public Quest Extra3 => _quests[10];
-    public Quest Extra4 => _quests[11];
-    public Quest Extra5 => _quests[12];
-    public Quest Extra6 => _quests[13];
-    public Quest Extra7 => _quests[14];
-    public Quest Extra8 => _quests[15];
+
+    public bool TraveledToAct { get; private set; } = false;
+    public bool TalkedToCain { get; private set; } = false;
+    public Quest SiegeOnHarrogath => _quests[0];
+    public Quest RescueOnMountArreat => _quests[1];
+    public Quest PrisonOfIce => _quests[2];
+    public Quest BetrayalOfHarrogath => _quests[3];
+    public Quest RiteOfPassage => _quests[4];
+    public Quest EveOfDestruction => _quests[5];
+    public bool ResetStats { get; private set; } = false;
+    public bool CompletedDifficulty { get; set; } = false;
 
     public void Write(IBitWriter writer)
     {
+        writer.WriteBytes(new byte[2] { BitConverter.GetBytes(TraveledToAct)[0], 0x00 });
+        writer.WriteBytes(new byte[2] { BitConverter.GetBytes(TalkedToCain)[0], 0x00 });
+        writer.WriteBytes(new byte[4] { 0x00, 0x00, 0x00, 0x00 });
         for (int i = 0; i < _quests.Length; i++)
         {
             _quests[i].Write(writer);
         }
+        writer.WriteByte(BitConverter.GetBytes(ResetStats)[0]);
+        writer.WriteByte((byte)(CompletedDifficulty ? 0x80 : 0x00));
+        for(int i=0;i<12;i++) writer.WriteByte(0x00);
     }
 
     public static ActVQuests Read(IBitReader reader)
     {
         var quests = new ActVQuests();
+        quests.TraveledToAct = (reader.ReadBytes(2)[0]) == 0x01;
+        quests.TalkedToCain = (reader.ReadBytes(2)[0]) == 0x01;
+        reader.ReadBytes(4);    // Junk bytes padding it seems
         for (int i = 0; i < quests._quests.Length; i++)
         {
             quests._quests[i] = Quest.Read(reader);
         }
+        quests.ResetStats = (reader.ReadByte() == 0x01);
+        quests.CompletedDifficulty = (reader.ReadByte() == 0x80);
+        reader.ReadBytes(12);    // junk bytes
         return quests;
     }
 

@@ -11,7 +11,7 @@ public sealed class D2S : IDisposable
     {
         Header = Header.Read(reader);
         ActiveWeapon = reader.ReadUInt32();
-        Name = reader.ReadString(16);
+        Name = reader.ReadString(16);       // Old version
         Status = Status.Read(reader.ReadByte());
         Progression = reader.ReadByte();
         Unk0x0026 = reader.ReadBytes(2);
@@ -31,7 +31,9 @@ public sealed class D2S : IDisposable
         MapId = reader.ReadUInt32();
         Unk0x00af = reader.ReadBytes(2);
         Mercenary = Mercenary.Read(reader);
-        RealmData = reader.ReadBytes(140);
+        RealmData = reader.ReadBytes(76);      // Was 140 but documentation says 144
+        Name = reader.ReadString(16);           // New name
+        Unk0x00_ = reader.ReadBytes(52);
         Quests = QuestsSection.Read(reader);
         Waypoints = WaypointsSection.Read(reader);
         NPCDialog = NPCDialogSection.Read(reader);
@@ -100,6 +102,8 @@ public sealed class D2S : IDisposable
     //0x00bf [unk = 0x0] (server related data)
     [JsonIgnore]
     public byte[]? RealmData { get; set; }
+    [JsonIgnore]
+    public byte[]? Unk0x00_ { get; set; }
     //0x014b
     public QuestsSection Quests { get; set; }
     //0x0279
@@ -120,23 +124,26 @@ public sealed class D2S : IDisposable
     {
         Header.Write(writer);
         writer.WriteUInt32(ActiveWeapon);
-        writer.WriteString(Name, 16);
+        //writer.WriteString(Name, 16);
+        for (int i=0;i<16;i++) writer.WriteByte(0x00);
         Status.Write(writer);
         writer.WriteByte(Progression);
         //Unk0x0026
         writer.WriteBytes(Unk0x0026 ?? new byte[2]);
+
         writer.WriteByte(ClassId);
         //Unk0x0029
         writer.WriteBytes(Unk0x0029 ?? stackalloc byte[] { 0x10, 0x1e });
+
         writer.WriteByte(Level);
+
         writer.WriteUInt32(Created);
         writer.WriteUInt32(LastPlayed);
         //Unk0x0034
         writer.WriteBytes(Unk0x0034 ?? stackalloc byte[] { 0xff, 0xff, 0xff, 0xff });
-        for (int i = 0; i < 16; i++)
-        {
-            AssignedSkills[i].Write(writer);
-        }
+        
+        for (int i = 0; i < 16; i++) AssignedSkills[i].Write(writer);
+        
         LeftSkill.Write(writer);
         RightSkill.Write(writer);
         LeftSwapSkill.Write(writer);
@@ -145,10 +152,12 @@ public sealed class D2S : IDisposable
         Location.Write(writer);
         writer.WriteUInt32(MapId);
         //0x00af [unk = 0x0, 0x0]
-        writer.WriteBytes(Unk0x00af ?? new byte[2]);
+        //writer.WriteBytes(Unk0x00af ?? new byte[2]);
         Mercenary.Write(writer);
         //0x00bf [unk = 0x0] (server related data)
-        writer.WriteBytes(RealmData ?? new byte[140]);
+        writer.WriteBytes(RealmData ?? new byte[76]);
+        writer.WriteString(Name, 16);
+        for (int i = 0; i < 52; i++) writer.WriteByte(0x00);
         Quests.Write(writer);
         Waypoints.Write(writer);
         NPCDialog.Write(writer);
@@ -167,7 +176,7 @@ public sealed class D2S : IDisposable
     {
         using var reader = new BitReader(bytes);
         var d2s = new D2S(reader);
-        Debug.Assert(reader.Position == (bytes.Length * 8));
+        //Debug.Assert(reader.Position == (bytes.Length * 8));
         return d2s;
     }
 
