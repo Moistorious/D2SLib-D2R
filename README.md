@@ -1,6 +1,6 @@
 ### D2SLib
 
-Simple C# library for reading and writing Diablo 2 saves. Supports version 1.10 through Diablo II: Resurrected (1.15). Supports reading both d2s (player saves) and d2i (shared stash) files.
+Simple C# library for reading and writing Diablo 2 saves. Supports version 2.7 of D2R. Supports reading both d2s (player saves) and d2i (shared stash) files.
 
 
 ### Usage
