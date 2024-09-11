@@ -1,20 +1,39 @@
 ﻿using D2SLib.IO;
+using System.Buffers.Binary;
 
 namespace D2SLib.Model.Save;
 
 public sealed class D2I : IDisposable
 {
+
+    public List<StashTab> Tabs = new List<StashTab>();
+
+    /* C:\Users\Tiama\Saved Games\Diablo II Resurrected\mods\D2RMM\SharedStashSoftCoreV2.d2i (2024-06-08 11:40:51 AM)
+   StartOffset(h): 00000000, EndOffset(h): 0000003F, Length(h): 00000040 */
+
+
     private D2I(IBitReader reader, uint version)
     {
-        ItemList = ItemList.Read(reader, version);
+        while(reader.Length() > reader.Position)
+        {
+            Tabs.Add(StashTab.Read(reader));
+        }
     }
 
-    public ItemList ItemList { get; }
+    public Header Header { get; }
+    //public ItemList ItemList { get; }
 
-    public void Write(IBitWriter writer, uint version)
+    public void Write(IBitWriter writer)
     {
-        ItemList.Write(writer, version);
+        foreach(var tab in Tabs)
+        {
+            var bytes = StashTab.Write(tab);
+            writer.WriteBytes(bytes);
+        }
+        
     }
+
+
 
     public static D2I Read(IBitReader reader, uint version) => new(reader, version);
 
@@ -27,9 +46,9 @@ public sealed class D2I : IDisposable
     public static byte[] Write(D2I d2i, uint version)
     {
         using var writer = new BitWriter();
-        d2i.Write(writer, version);
+        d2i.Write(writer);
         return writer.ToArray();
     }
 
-    public void Dispose() => ItemList?.Dispose();
+    public void Dispose() => Tabs.ForEach(tab=> tab.Dispose());
 }

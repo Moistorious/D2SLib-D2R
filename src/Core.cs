@@ -59,7 +59,7 @@ public class Core
     public static MemoryOwner<byte> WriteD2IPooled(D2I d2i, uint version)
     {
         using var writer = new BitWriter();
-        d2i.Write(writer, version);
+        d2i.Write(writer);
         return writer.ToPooledArray();
     }
 

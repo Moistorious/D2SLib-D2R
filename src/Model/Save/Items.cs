@@ -1,5 +1,6 @@
 ﻿using D2SLib.IO;
 using D2SLib.Model.Data;
+using System.Buffers.Binary;
 using System.Text;
 using System.Text.Json.Serialization;
 
@@ -44,6 +45,108 @@ public enum ItemQuality : byte
     Tempered
 }
 
+public sealed class StashTab : IDisposable
+{
+    public ItemList Items { get; }
+    public uint Magic { get; } = 0xAA55AA55; // little endian
+    public uint Unknown { get; } = 0x000001; // little endian
+    public uint Version { get; }
+    public uint Checksum { get; }
+    public uint Length { get; }
+    public byte[] bytes1 { get; }
+
+    public StashTab(IBitReader reader)
+    {
+        Magic = reader.ReadUInt32();
+        Unknown = reader.ReadUInt32();
+        Version = reader.ReadUInt32();
+        Checksum = reader.ReadUInt32();
+        Length = reader.ReadUInt32();
+        bytes1 = reader.ReadBytes(44);
+        Items = ItemList.Read(reader, Version);
+    }
+    public static byte[] Write(StashTab tab)
+    {
+        using var writer = new BitWriter();
+        tab.Write(writer);
+        byte[] bytes = writer.ToArray();
+        StashTab.Fix(bytes);
+        return bytes;
+    }
+
+    public static void Fix(Span<byte> bytes)
+    {
+        FixSize(bytes);
+        //FixChecksum(bytes);
+    }
+
+    public static void FixSize(Span<byte> bytes)
+    {
+        Span<byte> length = stackalloc byte[sizeof(uint)];
+        BinaryPrimitives.WriteUInt32LittleEndian(length, (uint)bytes.Length);
+        length.CopyTo(bytes[16..]);
+    }
+    /*
+    private long CalculateAtmaCheckSum(Span<byte> bytes)
+    {
+        long lCheckSum = 0;
+
+        // calculate a new checksum
+        for (int i = 0; i < bytes.Length; i++)
+        {
+            BitConverter.ToUInt64(bytes)
+            bytes.
+            long lByte = iBR.Read(8);
+            if (i >= 7 && i <= 10)
+            {
+                lByte = 0;
+            }
+
+            long upshift = (lCheckSum << 33) >> 32;
+            long add = lByte + ((lCheckSum >> 31) == 1 ? 1 : 0);
+            lCheckSum = upshift + add;
+        }
+
+        // Console.Error.WriteLine($"Test {lOriginal} - {lCheckSum} = {lOriginal == lCheckSum}");
+        return lCheckSum;
+    }*/
+
+
+    public static void FixChecksum(Span<byte> bytes)
+    {
+        for (int i = 12; i < 16; i++) bytes[i] = 0x00;
+        int checksum = 0;
+        for (int i = 0; i < bytes.Length; i++)
+        {
+            checksum = bytes[i] + (checksum * 2) + (checksum < 0 ? 1 : 0);
+        }
+        Span<byte> csb = stackalloc byte[sizeof(int)];
+        BinaryPrimitives.WriteInt32LittleEndian(csb, checksum);
+        csb.CopyTo(bytes[12..]);
+    }
+
+    public static StashTab Read(IBitReader reader)
+    {
+        return new StashTab(reader);
+    }
+    public void Write(IBitWriter writer)
+    {
+        writer.WriteUInt32(Magic);
+        writer.WriteUInt32(Unknown);
+        writer.WriteUInt32(Version);
+        writer.WriteUInt32(Checksum);
+        writer.WriteUInt32(Length);
+        writer.WriteBytes(bytes1);
+        Items.Write(writer, Version);
+    }
+
+    public void Dispose()
+    {
+        throw new NotImplementedException();
+    }
+}
+
+[Serializable]
 public sealed class ItemList : IDisposable
 {
     private ItemList(ushort header, ushort count)
@@ -60,7 +163,9 @@ public sealed class ItemList : IDisposable
     public void Write(IBitWriter writer, uint version)
     {
         writer.WriteUInt16(Header ?? 0x4D4A);
+        Count = (ushort)Items.Count;
         writer.WriteUInt16(Count);
+        
         for (int i = 0; i < Count; i++)
         {
             Items[i].Write(writer, version);
@@ -98,6 +203,7 @@ public sealed class ItemList : IDisposable
     }
 }
 
+[Serializable]
 public sealed class Item : IDisposable
 {
     private InternalBitArray _flags = new(4);
@@ -248,6 +354,8 @@ public sealed class Item : IDisposable
     private static void ReadCompact(IBitReader reader, Item item, uint version)
     {
         Span<byte> bytes = stackalloc byte[4];
+        var position = reader.Position;
+        
         reader.ReadBytes(bytes);
         item.Flags = new InternalBitArray(bytes);
         if (version <= 0x60)
@@ -401,6 +509,15 @@ public sealed class Item : IDisposable
         ushort propertyLists = 0;
         if (item.IsRuneword)
         {
+            var pos = reader.Position;
+            List<uint> vals = new List<uint> { };
+            for(int i = 8; i < 16; i++)
+            {
+                vals.Add(reader.ReadUInt32(i));
+                reader.SeekBits(pos);
+            }
+
+
             item.RunewordId = reader.ReadUInt32(12);
             propertyLists |= (ushort)(1 << (reader.ReadUInt16(4) + 1));
         }
@@ -593,6 +710,7 @@ public sealed class Item : IDisposable
     }
 }
 
+[Serializable]
 public class ItemStatList
 {
     private const ushort magicmindam = 52;
@@ -652,7 +770,7 @@ public class ItemStatList
     }
 
 }
-
+[Serializable]
 public class ItemStat
 {
     public ushort? Id { get; set; }

@@ -123,6 +123,11 @@ public sealed class BitReader : IBitReader, IDisposable
         return ReadInt32LittleEndian(bytes);
     }
 
+    public uint Length()
+    { 
+        return (uint)_bits.Length;
+    }
+
     public int ReadInt32() => ReadInt32(sizeof(int) * 8);
 
     public string ReadString(int byteCount)
